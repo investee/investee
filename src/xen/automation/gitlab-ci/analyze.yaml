@@ -1,0 +1,108 @@
+.eclair-analysis:
+  stage: analyze
+  tags:
+    - eclair-analysis
+  variables:
+    ECLAIR_OUTPUT_DIR: "ECLAIR_out"
+    ANALYSIS_KIND: "normal"
+    ENABLE_ECLAIR_BOT: "n"
+    AUTO_PR_BRANCH: "staging"
+    AUTO_PR_REPOSITORY: "xen-project/xen"
+  script:
+    - ./automation/scripts/eclair 2>&1 | tee "${LOGFILE}"
+  artifacts:
+    when: always
+    paths:
+      - "${ECLAIR_OUTPUT_DIR}/*.log"
+      - "${ECLAIR_OUTPUT_DIR}/*.txt"
+      - '*.log'
+    reports:
+      codequality: gl-code-quality-report.json
+  rules:
+    - if: $WTOKEN == null
+      when: never
+    - when: always
+  needs: []
+
+.eclair-analysis:triggered:
+  extends: .eclair-analysis
+  allow_failure: true
+  rules:
+    - if: $WTOKEN && $CI_PROJECT_PATH =~ /^xen-project\/people\/.*$/
+      when: manual
+    - !reference [.eclair-analysis, rules]
+
+eclair-x86_64:
+  extends: .eclair-analysis:triggered
+  variables:
+    LOGFILE: "eclair-x86_64.log"
+    VARIANT: "X86_64"
+    RULESET: "Set1"
+
+eclair-ARM64:
+  extends: .eclair-analysis:triggered
+  variables:
+    LOGFILE: "eclair-ARM64.log"
+    VARIANT: "ARM64"
+    RULESET: "Set1"
+
+.eclair-analysis:on-schedule:
+  extends: .eclair-analysis
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+      when: never
+    - !reference [.eclair-analysis, rules]
+
+eclair-x86_64-Set1:on-schedule:
+  extends: .eclair-analysis:on-schedule
+  variables:
+    VARIANT: "X86_64"
+    RULESET: "Set1"
+    ANALYSIS_KIND: "${RULESET}-scheduled"
+    LOGFILE: "eclair-${VARIANT}-${RULESET}.log"
+  allow_failure: true
+
+eclair-x86_64-Set2:on-schedule:
+  extends: .eclair-analysis:on-schedule
+  variables:
+    VARIANT: "X86_64"
+    RULESET: "Set2"
+    ANALYSIS_KIND: "${RULESET}-scheduled"
+    LOGFILE: "eclair-${VARIANT}-${RULESET}.log"
+  allow_failure: true
+
+eclair-x86_64-Set3:on-schedule:
+  extends: .eclair-analysis:on-schedule
+  variables:
+    VARIANT: "X86_64"
+    RULESET: "Set3"
+    ANALYSIS_KIND: "${RULESET}-scheduled"
+    LOGFILE: "eclair-${VARIANT}-${RULESET}.log"
+  allow_failure: true
+
+eclair-ARM64-Set1:on-schedule:
+  extends: .eclair-analysis:on-schedule
+  variables:
+    VARIANT: "ARM64"
+    RULESET: "Set1"
+    ANALYSIS_KIND: "${RULESET}-scheduled"
+    LOGFILE: "eclair-${VARIANT}-${RULESET}.log"
+  allow_failure: true
+
+eclair-ARM64-Set2:on-schedule:
+  extends: .eclair-analysis:on-schedule
+  variables:
+    VARIANT: "ARM64"
+    RULESET: "Set2"
+    ANALYSIS_KIND: "${RULESET}-scheduled"
+    LOGFILE: "eclair-${VARIANT}-${RULESET}.log"
+  allow_failure: true
+
+eclair-ARM64-Set3:on-schedule:
+  extends: .eclair-analysis:on-schedule
+  variables:
+    VARIANT: "ARM64"
+    RULESET: "Set3"
+    ANALYSIS_KIND: "${RULESET}-scheduled"
+    LOGFILE: "eclair-${VARIANT}-${RULESET}.log"
+  allow_failure: true

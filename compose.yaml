@@ -1,0 +1,16 @@
+services:
+  investee:
+    image: investee:latest
+    network_mode: "host"
+    build:
+      context: .
+      target: investee
+      dockerfile: ./docker/Dockerfile
+    volumes:
+      - ./src:/src:rw
+      - ~/.gitconfig:/etc/gitconfig:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - ./docker/sh-entrypoint.sh:/sh-entrypoint.sh:ro
+      - ./docker/investee-entrypoint.sh:/investee-entrypoint.sh:ro
+      - ./docker/build-entrypoint.sh:/build-entrypoint.sh:ro
+      - ./docker/svc-log-entrypoint.sh:/svc-log-entrypoint.sh:ro

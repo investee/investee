@@ -1,0 +1,45 @@
+# Copyright 2018 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("//build/image/image.gni")
+import("//test/hftest/args.gni")
+
+# Tests with no secondary VMs.
+vm_kernel("primary_only_test_vm") {
+  testonly = true
+
+  sources = [
+    "faults.c",
+    "primary_only.c",
+  ]
+
+  deps = [
+    "//test/hftest:hftest_primary_vm",
+    "//test/vmapi/common:ffa",
+  ]
+}
+
+manifest("primary_only_test_manifest") {
+  source = "manifest.dts"
+  output = "manifest.dtb"
+  overlay = hftest_manifest_overlay
+}
+
+initrd("primary_only_test") {
+  testonly = true
+  files = [
+    [
+      "manifest.dtb",
+      ":primary_only_test_manifest",
+      "manifest.dtb",
+    ],
+    [
+      "primary_only_test",
+      ":primary_only_test_vm",
+      "primary_only_test_vm.bin",
+    ],
+  ]
+}

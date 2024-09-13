@@ -1,0 +1,11 @@
+*.swp
+*.backup
+
+src/out-br
+src/out
+
+src/.repo
+.vscode/
+
+src/svc-gdb.log
+src/sw-serial.log

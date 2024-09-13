@@ -1,0 +1,54 @@
+# Copyright 2019 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("//build/image/image.gni")
+import("//test/hftest/args.gni")
+
+group("arch") {
+  testonly = true
+
+  deps = [ ":aarch64_test" ]
+}
+
+# Tests specific to aarch64.
+vm_kernel("aarch64_test_vm") {
+  testonly = true
+  public_configs = [ "//src/arch/aarch64:config" ]
+
+  sources = [
+    "arch_features.c",
+    "smc_whitelist.c",
+    "smccc.c",
+  ]
+
+  deps = [
+    "//src/arch/aarch64:arch",
+    "//test/hftest:hftest_primary_vm",
+  ]
+}
+
+manifest("aarch64_test_manifest") {
+  source = "manifest.dts"
+  output = "manifest.dtb"
+  overlay = hftest_manifest_overlay
+}
+
+initrd("aarch64_test") {
+  testonly = true
+
+  files = [
+    [
+      "manifest.dtb",
+      ":aarch64_test_manifest",
+      "manifest.dtb",
+    ],
+    [
+      "aarch64_test",
+      ":aarch64_test_vm",
+      "aarch64_test_vm.bin",
+    ],
+  ]
+}

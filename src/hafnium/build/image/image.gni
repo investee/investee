@@ -1,0 +1,429 @@
+# Copyright 2018 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("//build/toolchain/embedded.gni")
+import("//build/toolchain/platform.gni")
+
+# Build image, link to an ELF file then convert to plain binary.
+template("image_binary") {
+  assert(defined(invoker.image_name),
+         "image_binary() must specify an \"image_name\" value")
+
+  output_root = ""
+  if (defined(invoker.output_path)) {
+    output_root += "${invoker.output_path}/"
+  }
+  output_root += invoker.image_name
+
+  file_root = "${root_out_dir}/${output_root}"
+  elf_file = "${file_root}.elf"
+  bin_file = "${file_root}.bin"
+
+  elf_target = "${target_name}__elf"
+  checked_elf_target = "${target_name}__checked_elf"
+
+  # Link objects together
+  executable(elf_target) {
+    forward_variables_from(invoker,
+                           [
+                             "cflags",
+                             "cflags_c",
+                             "defines",
+                             "deps",
+                             "include_dirs",
+                             "public_configs",
+                             "public_deps",
+                             "sources",
+                             "testonly",
+                           ])
+    output_name = "${output_root}.elf"
+    inputs = [ rebase_path("//build/image/image.ld") ]
+    ldflags = [
+      "-T",
+      rebase_path("//build/image/image.ld"),
+    ]
+    visibility = [
+      ":${checked_elf_target}",
+      ":${invoker.target_name}",
+    ]
+  }
+
+  # Analyze the generated ELF file and check that assembly-level fixes, e.g.
+  # for CPU errata, have been properly applied.
+  action(checked_elf_target) {
+    forward_variables_from(invoker, [ "testonly" ])
+    stamp_file = elf_file + "_check.stamp"
+
+    script = "//build/image/check_elf.py"
+    deps = [ ":${elf_target}" ]
+    args = [
+      rebase_path(elf_file),
+      rebase_path(stamp_file),
+      "--max-image-size",
+      "$plat_max_image_size",
+    ]
+    outputs = [ stamp_file ]
+    visibility = [ ":${invoker.target_name}" ]
+  }
+
+  action(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+
+    script = "//build/image/convert_to_binary.py"
+
+    if (defined(invoker.check_binary) && invoker.check_binary == true) {
+      deps = [ ":${checked_elf_target}" ]
+    } else {
+      deps = [ ":${elf_target}" ]
+    }
+    args = [
+      "--input",
+      rebase_path(elf_file),
+      "--output",
+      rebase_path(bin_file),
+    ]
+    outputs = [ bin_file ]
+  }
+}
+
+# Helper to build a hypervisor image
+template("hypervisor") {
+  image_binary(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "cflags",
+                             "cflags_c",
+                             "defines",
+                             "deps",
+                             "public_deps",
+                             "sources",
+                             "testonly",
+                           ])
+    image_name = target_name
+
+    # Perform checks on the generated binary to prevent regressing on some
+    # classes of bugs, typically CPU erratas.
+    check_binary = true
+  }
+}
+
+# Helper to build a virtual machine kernel
+template("vm_kernel") {
+  image_binary(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "cflags",
+                             "cflags_c",
+                             "defines",
+                             "deps",
+                             "include_dirs",
+                             "public_configs",
+                             "public_deps",
+                             "sources",
+                             "testonly",
+                           ])
+    output_path = rebase_path(".", root_out_dir, target_out_dir)
+    image_name = target_name
+  }
+}
+
+# Build the initial RAM disk for the Linux VM.
+template("linux_initrd") {
+  initrd_base = "${target_out_dir}/${target_name}/initrd"
+  initrd_file = "${initrd_base}.img"
+  initrd_staging = "${initrd_base}"
+
+  copy_sources = []
+  copy_deps = []
+
+  # Add the files that need to be packaged into the RAM disk. The information
+  # about these files is encoded in lists with the following elements:
+  #
+  # - Source file: the target will have the same name as the source file.
+  # - Build target for the file (dependency)
+  foreach(file, invoker.files) {
+    copy_sources += [ file[0] ]
+    copy_deps += [ file[1] ]
+  }
+
+  copy("${target_name}__staging") {
+    forward_variables_from(invoker, [ "testonly" ])
+    sources = copy_sources
+    deps = copy_deps
+    outputs = [ "${initrd_staging}/{{source_file_part}}" ]
+  }
+
+  action(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    script = "//build/image/generate_linux_initrd.py"
+    args = [
+      "--staging",
+      rebase_path(initrd_staging),
+      "--output",
+      rebase_path(initrd_file),
+    ]
+    deps = [ ":${target_name}__staging" ]
+    outputs = [ initrd_file ]
+  }
+}
+
+template("device_tree") {
+  action(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "deps",
+                           ])
+    script = "//build/image/dtc.py"
+
+    sources = [ invoker.source ]
+    outputs = [ invoker.output ]
+    args = [
+      "compile",
+      "-i",
+      rebase_path(sources[0]),
+      "-o",
+      rebase_path(outputs[0]),
+    ]
+  }
+}
+
+template("fdt_overlay") {
+  action(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "deps",
+                           ])
+    script = "//build/image/dtc.py"
+
+    sources = [
+      invoker.base,
+      invoker.overlay,
+    ]
+    outputs = [ invoker.output ]
+    args = [
+      "overlay",
+      rebase_path(outputs[0]),
+      rebase_path(sources[0]),
+      rebase_path(sources[1]),
+    ]
+  }
+}
+
+template("incbin") {
+  source_set(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "deps",
+                           ])
+
+    sources = [ "//build/image/incbin.S" ]
+    inputs = invoker.sources
+    defines = [
+      "SECTION_NAME=" + invoker.section,
+      "FILE_PATH=\"" + rebase_path(inputs[0]) + "\"",
+    ]
+  }
+}
+
+template("incbin_target") {
+  incbin(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "deps",
+                             "section",
+                           ])
+    target_outputs = get_target_outputs(invoker.target)
+    target_file = target_outputs[0]
+    sources = [ target_file ]
+    deps = [ invoker.target ]
+  }
+}
+
+# Generate the manifest for the hypervisor and apply overlay if specified.
+template("manifest") {
+  # Check if the invoker specified an overlay for the manifest.
+  if (defined(invoker.overlay) && invoker.overlay != "") {
+    base_out_dir = invoker.base_out_dir
+
+    base_target = "${target_name}__manifest_base"
+    base_file = "${base_out_dir}/manifest_base.dtb"
+    overlay_target = "${target_name}__manifest_overlay"
+    overlay_file = "${base_out_dir}/manifest_overlay.dtbo"
+
+    # Compile the base manifest.
+    device_tree(base_target) {
+      source = invoker.source
+      output = base_file
+    }
+
+    # Compile the manifest overlay.
+    device_tree(overlay_target) {
+      source = invoker.overlay
+      output = overlay_file
+    }
+
+    # Merge the base manifest and the overlay, producing the final manifest.
+    fdt_overlay(target_name) {
+      base = base_file
+      overlay = overlay_file
+      output = "${target_out_dir}" + "/" + invoker.output
+      deps = [
+        ":$base_target",
+        ":$overlay_target",
+      ]
+    }
+  } else {
+    # No overlay specified. Compile the manifest to DTB.
+    device_tree(target_name) {
+      source = invoker.source
+      output = "${target_out_dir}" + "/" + invoker.output
+    }
+  }
+}
+
+# Build the initial RAM disk for the hypervisor.
+template("initrd") {
+  base_out_dir = "${target_out_dir}/${target_name}"
+
+  action(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    script = "//build/image/generate_initrd.py"
+
+    initrd_file = "${base_out_dir}/initrd.img"
+    initrd_staging = "${base_out_dir}/initrd"
+
+    deps = []
+    args = [
+      "--staging",
+      rebase_path(initrd_staging),
+      "--output",
+      rebase_path(initrd_file),
+    ]
+
+    # Add the files that need to be packaged into the RAM disk. The information
+    # about these files is encoded in lists with the following elements:
+    #
+    # - Target file name in the RAM disk
+    # - Build target for the file
+    # - File name to use as source (generated as output of the build)
+    foreach(file, invoker.files) {
+      deps += [ file[1] ]
+      args += [
+        "--file",
+        file[0],
+        rebase_path(get_label_info(file[1], "target_out_dir") + "/" + file[2]),
+      ]
+    }
+
+    outputs = [ initrd_file ]
+  }
+}
+
+# Generate Secure Partition package
+template("partition_package") {
+  base_out_dir = "${target_out_dir}/${target_name}"
+
+  action(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    script = "//build/image/sptool.py"
+
+    output_package = "${base_out_dir}/${invoker.output}"
+
+    deps = []
+    args = []
+
+    foreach(file, invoker.files) {
+      deps += [
+        file[2],
+        file[3],
+      ]
+      partition_dtb = rebase_path(get_label_info(file[0], "target_out_dir"))
+      partition_img = rebase_path(get_label_info(file[1], "target_out_dir"))
+      args += [
+        "-i",
+        "${partition_img}:${partition_dtb}",
+        "-o",
+        rebase_path(output_package),
+      ]
+    }
+
+    args += [
+      "--pm-offset",
+      "${invoker.pm_offset}",
+      "--img-offset",
+      "${invoker.img_offset}",
+    ]
+
+    outputs = [ output_package ]
+  }
+}
+
+# Generate a JSON file containing the path to the necessary artifacts to run
+# an FVP driver, and adequately populate its arguments.
+template("partitions_json") {
+  base_out_dir = "${target_out_dir}"
+  action(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "sps",
+                             "vms",
+                           ])
+
+    script = "//build/image/generate_partitions_json.py"
+
+    json_file = "${base_out_dir}/" + invoker.json_file
+
+    args = []
+    deps = []
+
+    foreach(sp, sps) {
+      deps += [
+        sp[2],
+        sp[3],
+      ]
+
+      package_dir = get_label_info(sp[2], "name")
+      out_dir = get_label_info(sp[2], "target_out_dir")
+      img = rebase_path(out_dir) + "/" + package_dir + "/" + sp[0]
+
+      dts = rebase_path(sp[1])
+
+      args += [
+        "--sp",
+        "${img},${dts}",
+      ]
+    }
+
+    foreach(vm, vms) {
+      deps += [
+        vm[2],
+        vm[3],
+      ]
+
+      package_dir = get_label_info(vm[2], "name")
+      img = rebase_path(
+              get_label_info(package_dir + "/" + vm[0], "target_out_dir"))
+
+      dts = rebase_path(vm[1])
+      args += [
+        "--vm",
+        "${img},${dts}",
+      ]
+    }
+
+    args += [
+      "--out",
+      rebase_path(json_file),
+    ]
+
+    outputs = [ json_file ]
+  }
+}

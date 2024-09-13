@@ -1,0 +1,73 @@
+# Copyright 2018 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("//build/toolchain/platform.gni")
+
+# Default language and error reporting configuration.
+config("compiler_defaults") {
+  cflags = [
+    "-gdwarf-4",
+    "-Wall",
+    "-O2",
+
+    #"-Wextra",
+    "-Wpedantic",
+    "-Werror",
+
+    "-fstack-protector-all",
+  ]
+
+  cflags_c = [ "-std=c11" ]
+
+  cflags_cc = [ "-std=c++2a" ]
+}
+
+# Platform configuration.
+config("platform") {
+  assert(
+      plat_partition_max_memory_regions > 0 &&
+          plat_partition_max_memory_regions < 65536,
+      "Maximum SP memory regions must be between 1 and 65535: current = ${plat_partition_max_memory_regions}")
+  assert(
+      plat_partition_max_device_regions > 0 &&
+          plat_partition_max_device_regions < 65536,
+      "Maximum SP device regions must be between 1 and 65535: current = ${plat_partition_max_device_regions}")
+  assert(
+      plat_partition_max_intr_per_device > 0 &&
+          plat_partition_max_intr_per_device < 256,
+      "Maximum interrupts per device regions must be between 1 and 255: current = ${plat_partition_max_intr_per_device}")
+  assert(
+      plat_partition_max_streams_per_device > 0 &&
+          plat_partition_max_streams_per_device < 256,
+      "Maximum streams per device regions must be between 1 and 255: current = ${plat_partition_max_streams_per_device}")
+
+  assert(
+      plat_num_virtual_interrupts_ids > 0 &&
+          plat_num_virtual_interrupts_ids <= 5120,
+      "Maximum virtual interrupt ids per vcpu must be between 1 and 5120: current = ${plat_num_virtual_interrupts_ids}")
+
+  include_dirs = [
+    "//inc",
+    "//inc/vmapi",
+    "//src/arch/${plat_arch}/inc",
+
+    # Auto-generated headers using the 'offset_size_header' build rule.
+    "${root_gen_dir}/offset_size_header",
+  ]
+
+  defines = [
+    "HEAP_PAGES=${plat_heap_pages}",
+    "MAX_CPUS=${plat_max_cpus}",
+    "MAX_VMS=${plat_max_vms}",
+    "LOG_LEVEL=${plat_log_level}",
+    "ENABLE_ASSERTIONS=${enable_assertions}",
+    "PARTITION_MAX_MEMORY_REGIONS=${plat_partition_max_memory_regions}",
+    "PARTITION_MAX_DEVICE_REGIONS=${plat_partition_max_device_regions}",
+    "PARTITION_MAX_INTERRUPTS_PER_DEVICE=${plat_partition_max_intr_per_device}",
+    "PARTITION_MAX_STREAMS_PER_DEVICE=${plat_partition_max_streams_per_device}",
+    "HF_NUM_INTIDS=${plat_num_virtual_interrupts_ids}",
+  ]
+}

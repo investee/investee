@@ -1,0 +1,29 @@
+/*
+ * Copyright 2021 The Hafnium Authors.
+ *
+ * Use of this source code is governed by a BSD-style
+ * license that can be found in the LICENSE file or at
+ * https://opensource.org/licenses/BSD-3-Clause.
+ */
+
+/dts-v1/;
+
+/ {
+	compatible = "arm,ffa-manifest-1.0";
+	debug_name = "SP Service First";
+
+	/* Properties */
+	ffa-version = <0x00010001>; /* 31:16 - Major, 15:0 - Minor */
+	uuid = <0x9458bb2d 0x353b4ee2 0xaa25710c 0x99b73ddc>;
+	execution-ctx-count = <8>;
+	exception-level = <2>; /* S-EL1 */
+	execution-state = <0>; /* AARCH64 */
+	load-address = <0x6480000>;
+	entrypoint-offset = <0x2000>;
+	xlat-granule = <0>; /* 4KiB */
+	messaging-method = <0x7>; /* Supports direct and indirect requests. */
+	ns-interrupts-action = <1>; /* Managed exit is supported. */
+	managed-exit-virq;
+	boot-order = <1>;
+	notification-support; /* Receipt of notifications. */
+};

@@ -1,0 +1,322 @@
+# Copyright 2018 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("//build/toolchain/platform.gni")
+import("//test/hftest/args.gni")
+
+config("hftest_config") {
+  include_dirs = [ "//test/inc" ]
+
+  if (hftest_optimize_for_size == true) {
+    defines = [ "HFTEST_OPTIMIZE_FOR_SIZE" ]
+  }
+}
+
+#dlog for el0 partition that uses SVCs for debug logging
+source_set("el0_dlog") {
+  testonly = true
+  sources = [ "//src/dlog.c" ]
+  deps = [ "//src/arch/aarch64/hftest:el0_stdout" ]
+}
+
+source_set("el0_fdt_handler") {
+  testonly = true
+  sources = [ "//src/fdt_handler.c" ]
+  deps = [ "//src:fdt" ]
+}
+
+# Testing framework for a secondary EL0 partition in the normal world.
+# It's currently just a secondary partition and can't affect the tests directly.
+source_set("hftest_secondary_el0_partition") {
+  testonly = true
+
+  public_configs = [ ":hftest_config" ]
+
+  sources = [
+    "nwd_el0_service.c",
+    "service_common.c",
+  ]
+
+  deps = [
+    ":el0_dlog",
+    ":el0_fdt_handler",
+    "//src:panic",
+    "//src/arch/${plat_arch}/hftest:el0_entry",
+    "//test/hftest/arch/aarch64/el0:mm",
+  ]
+}
+
+# Testing framework for a S-EL0 partition.
+source_set("hftest_sel0_partition_base") {
+  testonly = true
+
+  public_configs = [ "//test/hftest:hftest_config" ]
+
+  sources = [
+    "sel0_secure_service.c",
+    "service_common.c",
+  ]
+
+  deps = [
+    ":el0_dlog",
+    ":el0_fdt_handler",
+    "//src:panic",
+    "//src/arch/${plat_arch}/hftest:el0_entry",
+    "//test/hftest/arch/aarch64/el0:mm",
+  ]
+}
+
+# Testing framework for a primary VM.
+source_set("hftest_primary_vm") {
+  testonly = true
+
+  public_configs = [ ":hftest_config" ]
+
+  deps = [
+    ":hftest_standalone",
+    "//vmlib/${plat_arch}:call",
+  ]
+}
+
+# Testing framework for a secondary VM. It's currently just a slave VM and
+# can't affect the tests directly.
+source_set("hftest_secondary_vm") {
+  testonly = true
+
+  public_configs = [ ":hftest_config" ]
+
+  sources = [ "service.c" ]
+
+  deps = [
+    ":mm",
+    ":power_mgmt",
+    ":service_common",
+    "//src:dlog",
+    "//src:fdt_handler",
+    "//src:memiter",
+    "//src:panic",
+    "//src:std",
+    "//src/arch/${plat_arch}:entry",
+    "//src/arch/${plat_arch}/hftest:entry",
+    "//src/arch/${plat_arch}/hftest:interrupts",
+    "//src/arch/${plat_arch}/hftest:power_mgmt",
+    "//vmlib/${plat_arch}:call",
+  ]
+}
+
+source_set("hftest_secure_service") {
+  testonly = true
+
+  public_configs = [
+    "//src/arch/aarch64:arch_config",
+    ":hftest_config",
+  ]
+
+  sources = [ "sel1_secure_service.c" ]
+
+  deps = [
+    ":mm",
+    ":service_common",
+    "//src:dlog",
+    "//src:fdt_handler",
+    "//src:panic",
+    "//src:std",
+    "//src/arch/${plat_arch}:entry",
+    "//src/arch/${plat_arch}/hftest:entry",
+    "//src/arch/${plat_arch}/hftest:power_mgmt",
+    "//src/arch/${plat_arch}/hftest:sp_secondary_entry",
+  ]
+}
+
+# Testing framework for a secondary VM. This framework doesn't provide services
+# and expects that secondary VMs will be passed the memory size in register x0
+# instead of a pointer to the FDT.
+source_set("hftest_secondary_vm_no_fdt") {
+  testonly = true
+
+  public_configs = [ ":hftest_config" ]
+
+  sources = [ "secondary_no_fdt.c" ]
+
+  deps = [
+    ":mm",
+    ":service_common",
+    "//src:dlog",
+    "//src:panic",
+    "//src:std",
+    "//src/arch/${plat_arch}:entry",
+    "//src/arch/${plat_arch}/hftest:entry",
+    "//src/arch/${plat_arch}/hftest:power_mgmt",
+    "//vmlib/${plat_arch}:call",
+  ]
+}
+
+# Testing framework for a hypervisor.
+source_set("hftest_hypervisor") {
+  testonly = true
+  public_configs = [ ":hftest_config" ]
+  deps = [ ":hftest_standalone" ]
+}
+
+# Testing framework for tests running under Linux in the primary VM.
+source_set("hftest_linux") {
+  testonly = true
+  public_configs = [ ":hftest_config" ]
+
+  sources = [ "linux_main.c" ]
+
+  deps = [
+    ":common",
+    "//src:dlog",
+    "//src:memiter",
+    "//src/arch/${plat_arch}/hftest:power_mgmt",
+  ]
+}
+
+source_set("hftest_standalone") {
+  visibility = [ ":*" ]
+  testonly = true
+
+  public_configs = [ ":hftest_config" ]
+
+  sources = [ "standalone_main.c" ]
+
+  deps = [
+    ":common",
+    ":mm",
+    ":power_mgmt",
+    "//src:dlog",
+    "//src:memiter",
+    "//src/arch/${plat_arch}:entry",
+    "//src/arch/${plat_arch}/hftest:entry",
+    "//src/arch/${plat_arch}/hftest:interrupts",
+    "//src/arch/${plat_arch}/hftest:power_mgmt",
+    hftest_ctrl,
+    hftest_device,
+  ]
+}
+
+source_set("hftest_standalone_secure") {
+  testonly = true
+
+  public_configs = [
+    "//src/arch/aarch64:arch_config",
+    ":hftest_config",
+  ]
+
+  sources = [ "standalone_main_secure.c" ]
+
+  deps = [
+    ":common",
+    ":mm",
+    ":power_mgmt",
+    "//src:dlog",
+    "//src:fdt",
+    "//src:fdt_handler",
+    "//src:memiter",
+    "//src/arch/${plat_arch}:entry",
+    "//src/arch/${plat_arch}/hftest:entry",
+    "//src/arch/${plat_arch}/hftest:interrupts",
+    "//src/arch/${plat_arch}/hftest:power_mgmt",
+    "//test/hftest:ctrl_uart",
+    hftest_device,
+  ]
+}
+
+# Common code for hftest, whether it is running under Linux, under Hafnium in
+# the primary VM, or directly on the hardware.
+source_set("common") {
+  visibility = [ ":*" ]
+  testonly = true
+  public_configs = [ ":hftest_config" ]
+  sources = [ "common.c" ]
+  deps = [
+    "//src:fdt_handler",
+    "//src:memiter",
+    "//src:panic",
+    "//src:std",
+  ]
+}
+
+source_set("service_common") {
+  visibility = [ ":*" ]
+  testonly = true
+  public_configs = [ ":hftest_config" ]
+  sources = [ "service_common.c" ]
+  deps = [
+    "//src:memiter",
+    "//src:panic",
+    "//src:std",
+    "//test/vmapi/common:ffa",
+  ]
+}
+
+source_set("device_psci") {
+  testonly = true
+
+  public_configs = [ ":hftest_config" ]
+
+  sources = [ "device_psci.c" ]
+
+  deps = [ "//src/arch/${plat_arch}/hftest:power_mgmt" ]
+}
+
+source_set("mm") {
+  testonly = true
+
+  public_configs = [ ":hftest_config" ]
+
+  sources = [ "mm.c" ]
+
+  deps = [
+    "//src:layout",
+    "//src:mm",
+    "//src/arch/${plat_arch}:arch",
+    "//src/arch/${plat_arch}/hftest:mm",
+  ]
+}
+
+source_set("power_mgmt") {
+  testonly = true
+
+  public_configs = [ ":hftest_config" ]
+
+  sources = [ "power_mgmt.c" ]
+
+  deps = [
+    ":mm",
+    "//src/arch/${plat_arch}/hftest:power_mgmt",
+  ]
+}
+
+source_set("ctrl_fdt") {
+  testonly = true
+
+  public_configs = [ ":hftest_config" ]
+
+  sources = [ "ctrl_fdt.c" ]
+
+  deps = [
+    "//src:dlog",
+    "//src:fdt",
+    "//src:memiter",
+  ]
+}
+
+source_set("ctrl_uart") {
+  testonly = true
+
+  public_configs = [ ":hftest_config" ]
+
+  sources = [ "ctrl_uart.c" ]
+
+  deps = [
+    "//src:dlog",
+    "//src:memiter",
+    hftest_device,
+    plat_console,
+  ]
+}

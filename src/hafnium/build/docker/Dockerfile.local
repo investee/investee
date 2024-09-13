@@ -1,0 +1,27 @@
+# Copyright 2019 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+#
+# Container derived from the base image hosted on Google Cloud Platform.
+# It sets up a user with the same UID/GID as the local user, so that generated
+# files can be accessed by the host.
+# Please keep the diff between base and local images as small as possible.
+#
+FROM eu.gcr.io/hafnium-build/hafnium_ci
+ARG LOCAL_UID=1000
+ARG LOCAL_GID=1000
+
+RUN	addgroup \
+		--gid "${LOCAL_GID}" \
+		hafnium \
+	&& adduser \
+		-disabled-password \
+		-gecos "" \
+		--uid "${LOCAL_UID}" \
+		--shell "/bin/bash" \
+		--ingroup hafnium \
+		hafnium
+USER hafnium

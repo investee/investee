@@ -1,0 +1,7 @@
+Checks: 'readability-*,-readability-identifier-length,portability-*,performance-*,misc-*,bugprone-*,-bugprone-easily-swappable-parameters,modernize-*,google-runtime-int,-modernize-deprecated-headers,-clang-analyzer-valist.Uninitialized,-readability-magic-numbers, -readability-function-cognitive-complexity,-modernize-macro-to-enum,-misc-redundant-expression,-readability-suspicious-call-argument'
+HeaderFilterRegex: '^(?!third_party).+'
+FormatStyle: file
+WarningsAsErrors: '*'
+CheckOptions:
+  - key: bugprone-reserved-identifier.AllowedIdentifiers
+    value: "__stack_chk_guard;__stack_chk_fail"

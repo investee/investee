@@ -1,0 +1,239 @@
+esc=$(printf '\e')
+cr=$(printf '\r')
+
+if [ -n "${GITLAB_CI:-}" ]; then
+    ci=gitlab
+    eol=
+    link_start="${esc}[33m"
+    link_end="${esc}[m"
+elif [ -n "${GITHUB_ACTION:-}" ]; then
+    ci=github
+    eol="\\"
+    link_start=
+    link_end=
+elif [ -n "${JENKINS_HOME:-}" ]; then
+    ci=jenkins
+    eol="<br/>"
+    link_start=
+    link_end=
+else
+    echo "Unexpected CI/CD context" >&2
+    exit 1
+fi
+
+open_section() {
+    id=$1
+    title=$2
+    collapsed=$3
+    echo "${esc}[0Ksection_start:$(date +%s):${id}${collapsed}${cr}${esc}[0K${esc}[1m${esc}[36m${title}${esc}[m"
+}
+
+close_section() {
+    id=$1
+    echo "${esc}[0Ksection_end:$(date +%s):${id}${cr}${esc}[0K"
+}
+
+summary() {
+    fixedReports=
+    newReports=
+    unfixedReports=
+    while read -r line; do
+        var=${line%%: *}
+        val=${line#*: }
+        eval "${var}=${val}"
+    done <"${updateLog}"
+
+    case "${ci}" in
+    github)
+        eol="\\"
+        ;;
+    gitlab)
+        eol=
+        ;;
+    jenkins)
+        eol="<br/>"
+        ;;
+    *)
+        eol=
+        ;;
+    esac
+
+    currentDbReportsUrl="${eclairReportUrlPrefix}/fs${jobDir}/PROJECT.ecd;/by_service.html#service&kind"
+    if [ -z "${newReports}" ]; then
+        fixedMsg="No fixed reports as there is no baseline"
+        unfixedMsg="Unfixed reports: ${unfixedReports}"
+        referenceReportsMsgTxt=
+        referenceReportsMsgLog=
+    else
+        fixedMsg="Fixed reports: ${fixedReports}"
+        unfixedMsg="Unfixed reports: ${unfixedReports} [new: ${newReports}]"
+        case "${event}" in
+        pull_request | auto_pull_request)
+            referenceDbReportsUrl="${eclairReportUrlPrefix}/fs${jobDir}/base/PROJECT.ecd;/by_service.html#service&kind"
+            reference_kind=base
+            ;;
+        push)
+            referenceDbReportsUrl="${eclairReportUrlPrefix}/fs${jobDir}/prev/PROJECT.ecd;/by_service.html#service&kind"
+            reference_kind=previous
+            ;;
+        *)
+            echo "Unexpected event ${event}" >&2
+            exit 1
+            ;;
+        esac
+    fi
+
+    case "${ci}" in
+    jenkins)
+        if [ -n "${newReports}" ]; then
+            referenceReportsMsgTxt="<a href="${referenceDbReportsUrl}">Browse ${reference_kind} reports</a>"
+        fi
+        cat <<EOF >"${summaryTxt}"
+${fixedMsg}${eol}
+${unfixedMsg}                                                                              ${eol}
+<a href="https://www.bugseng.com/eclair">
+  <img src="${eclairReportUrlPrefix}/rsrc/eclair.svg" width="100" />
+</a>
+<h3>${jobHeadline}</h3>
+<a href="${indexHtmlUrl}">Browse analysis summary</a>
+<a href="${currentDbReportsUrl}">Browse current reports</a>
+${referenceReportsMsgTxt}
+EOF
+        ;;
+    *)
+        if [ -n "${newReports}" ]; then
+            referenceReportsMsgTxt="Browse ${reference_kind} reports: ${referenceDbReportsUrl}"
+        fi
+        cat <<EOF >"${summaryTxt}"
+<a href="https://www.bugseng.com/eclair">
+  <img src="${eclairReportUrlPrefix}/rsrc/eclair.svg" width="100" />
+</a>
+Analysis Summary
+
+${jobHeadline}${eol}
+${fixedMsg}${eol}
+${unfixedMsg}${eol}
+Browse analysis summary: ${indexHtmlUrl}
+Browse current reports: ${currentDbReportsUrl}
+${referenceReportsMsgTxt}
+EOF
+        ;;
+    esac
+
+    analysisSummaryMsgLog="Browse analysis summary: ${link_start}${indexHtmlUrl}${link_end}"
+    currentReportsMsgLog="Browse current reports: ${link_start}${currentDbReportsUrl}${link_end}"
+    if [ -n "${newReports}" ]; then
+        referenceReportsMsgLog="Browse ${reference_kind} reports: ${link_start}${referenceDbReportsUrl}${link_end}"
+    fi
+    case ${ci} in
+    github)
+        cat "${summaryTxt}" >"${GITHUB_STEP_SUMMARY}"
+        ;;
+    gitlab)
+        open_section ECLAIR_summary "ECLAIR analysis summary" ""
+        # Generate summary and print it (GitLab-specific)
+        cat <<EOF
+${jobHeadline}
+${fixedMsg}
+${unfixedMsg}
+${analysisSummaryMsgLog}
+${currentReportsMsgLog}
+${referenceReportsMsgLog}
+EOF
+        close_section ECLAIR_summary
+        ;;
+    jenkins)
+        cat <<EOF
+${jobHeadline}
+${fixedMsg}
+${unfixedMsg}
+${analysisSummaryMsgLog}
+${currentReportsMsgLog}
+${referenceReportsMsgLog}
+EOF
+        ;;
+    *)
+        echo "Unexpected CI/CD context" >&2
+        exit 1
+        ;;
+    esac
+}
+
+log_file() {
+    section_id=$1
+    section_name=$2
+    file=$3
+    exit_code=$4
+    if [ "${exit_code}" = 0 ]; then
+        collapsed=[collapsed=true]
+    else
+        collapsed=
+    fi
+
+    case ${ci} in
+    github | jenkins)
+        echo "${section_name}"
+        ;;
+    gitlab)
+        open_section "${section_id}" "${section_name}" "${collapsed}"
+        ;;
+    *)
+        echo "Unexpected CI/CD context" >&2
+        exit 1
+        ;;
+    esac
+
+    cat "${file}"
+
+    case ${ci} in
+    github | jenkins) ;;
+    gitlab)
+        close_section "${section_id}"
+        ;;
+    *) ;;
+    esac
+}
+
+maybe_log_file_exit() {
+    section_id=$1
+    section_name=$2
+    file=$3
+    exit_code=$4
+
+    case ${ci} in
+    github | jenkins)
+        echo "${section_name}"
+        ;;
+    gitlab)
+        open_section "${section_id}" "${section_name}" ""
+        ;;
+    *)
+        echo "Unexpected CI/CD context" >&2
+        exit 1
+        ;;
+    esac
+
+    if [ "${exit_code}" != 0 ]; then
+        cat "${file}"
+    fi
+
+    case ${ci} in
+    github | jenkins) ;;
+    gitlab)
+        close_section "${section_id}"
+        ;;
+    *) ;;
+    esac
+    return "${exit_code}"
+}
+
+is_enabled() {
+    case "$1" in
+    true | TRUE | y | Y | yes | YES | 1)
+        return 0
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}

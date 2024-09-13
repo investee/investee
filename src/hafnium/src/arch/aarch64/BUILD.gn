@@ -1,0 +1,47 @@
+# Copyright 2018 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("args.gni")
+
+config("config") {
+  include_dirs = [ "." ]
+}
+
+config("arch_config") {
+  assert(secure_world == "0" || secure_world == "1",
+         "secure world set to <${secure_world}>")
+  defines = [ "SECURE_WORLD=${secure_world}" ]
+}
+
+# Implementation of the arch interface for aarch64.
+source_set("arch") {
+  public_configs = [ "//src/arch/aarch64:arch_config" ]
+  sources = [
+    "cache_helpers.S",
+    "irq.c",
+    "mm.c",
+    "stacks.S",
+    "sysregs.c",
+    "timer.c",
+  ]
+}
+
+source_set("std") {
+  sources = [
+    "stack_protector.c",
+    "std.c",
+  ]
+}
+
+# Entry code to prepare the loaded image to be run.
+source_set("entry") {
+  sources = [ "entry.S" ]
+}
+
+# Make a call to the secure monitor.
+source_set("smc") {
+  sources = [ "smc.c" ]
+}

@@ -1,0 +1,145 @@
+# Copyright 2019 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+template("source_dir") {
+  action("${target_name}") {
+    depfile = "${target_out_dir}/${target_name}.d"
+    outputs = [ "$target_out_dir/${target_name}.script.stamp" ]
+
+    script = "//build/linux/gen_depfile.py"
+    args = [
+      rebase_path(invoker.path, root_build_dir),
+      rebase_path(outputs[0], root_build_dir),
+      rebase_path(depfile, root_build_dir),
+    ]
+  }
+}
+
+template("source_dir_copy") {
+  source_dir_target = "${target_name}__source_dir"
+
+  source_dir(source_dir_target) {
+    path = invoker.path
+  }
+
+  action("${target_name}") {
+    script = "//build/linux/copy_dirs.py"
+    outputs = [ "$target_out_dir/${target_name}.script.stamp" ]
+    args = [
+      rebase_path(invoker.path),
+      rebase_path(target_out_dir),
+      rebase_path(outputs[0]),
+    ]
+    deps = [ ":${source_dir_target}" ]
+  }
+}
+
+template("linux_kernel") {
+  source_target = "${target_name}__source"
+  defconfig_target = "${target_name}__defconfig"
+  prebuilt_target = "${target_name}__prebuilt"
+
+  kernel_dir = "./"
+
+  # Args to build/make.py to start the Linux build.
+  shared_args = [
+    "--directory",
+    rebase_path(kernel_dir),
+
+    # TODO: Build with toolchain cc instead of a hardcoded one.
+    "ARCH=arm64",
+    "LLVM=1",
+    "LLVM_IAS=1",
+    "CROSS_COMPILE=aarch64-linux-gnu-",
+
+    # Build out-of-tree in `target_out_dir`.
+    "O=" + rebase_path(target_out_dir),
+
+    # TODO: assess if this setting is really required because the ninja
+    # top level invocation already cares about parallel build.
+    "-j24",
+  ]
+
+  # Subtarget which generates a depfile with all files in the Linux tree
+  # and gets invalidated if any of them change.
+  source_dir(source_target) {
+    path = kernel_dir
+  }
+
+  # Subtarget which runs `defconfig` and `modules_prepare`. Used by targets
+  # which do not require the whole kernel to have been built.
+  action(defconfig_target) {
+    script = "//build/make.py"
+    args = shared_args + [
+             "defconfig",
+             "modules_prepare",
+           ]
+
+    # We never use the output but GN requires each target to have one, and for
+    # its timestamp to change after a recompile. Use the .config file.
+    outputs = [ "${target_out_dir}/.config" ]
+    deps = [ ":${source_target}" ]
+  }
+
+  action(target_name) {
+    script = "//build/make.py"
+    output_file = "${target_out_dir}/${target_name}.bin"
+    args = shared_args + [
+             "--copy_out_file",
+             rebase_path("${target_out_dir}/arch/arm64/boot/Image"),
+             rebase_path(output_file),
+           ]
+    outputs = [ output_file ]
+    deps = [
+      ":${defconfig_target}",
+      ":${source_target}",
+    ]
+  }
+
+  # Subtarget for a prebuilt image, if defined.
+  if (defined(invoker.prebuilt)) {
+    copy(prebuilt_target) {
+      sources = [ invoker.prebuilt ]
+      outputs = [ "${target_out_dir}/${prebuilt_target}.bin" ]
+    }
+  }
+}
+
+template("linux_kernel_module") {
+  # Out-of-tree modules cannot be built outside of their directory.
+  # So as to avoid parallel builds under different toolchains clashing,
+  # work around by copying source files to `target_out_dir`.
+
+  source_target = "${target_name}__source"
+
+  module_dir = "./"
+
+  source_dir_copy(source_target) {
+    path = module_dir
+  }
+
+  action(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    script = "//build/make.py"
+    args = [
+      "--directory",
+      rebase_path(target_out_dir),
+      "HAFNIUM_PATH=" + rebase_path("//"),
+      "KERNEL_PATH=" + rebase_path(invoker.kernel_dir),
+      "O=" +
+          rebase_path(get_label_info(invoker.kernel_target, "target_out_dir")),
+      "ARCH=arm64",
+      "LLVM=1",
+      "LLVM_IAS=1",
+      "CROSS_COMPILE=aarch64-linux-gnu-",
+    ]
+    outputs = [ "${target_out_dir}/${invoker.module_name}.ko" ]
+    deps = [
+      ":${source_target}",
+      "${invoker.kernel_target}__defconfig",
+    ]
+  }
+}

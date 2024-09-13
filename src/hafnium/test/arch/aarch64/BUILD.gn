@@ -1,0 +1,26 @@
+# Copyright 2020 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("//build/image/image.gni")
+import("//build/toolchain/platform.gni")
+
+group("aarch64") {
+  testonly = true
+
+  deps = [ ":aarch64_test" ]
+}
+
+hypervisor("aarch64_test") {
+  testonly = true
+
+  sources = [ "tee_test.c" ]
+
+  deps = [
+    "//src:vm",
+    "//src/arch/${plat_arch}/hypervisor:other_world",
+    "//test/hftest:hftest_hypervisor",
+  ]
+}

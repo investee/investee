@@ -1,0 +1,74 @@
+Booting Xen
+===========
+
+Xen follows the zImage protocol defined for 32-bit ARM Linux[1] and the
+Image protocol defined for ARM64 Linux[2].
+
+In both cases the recommendation to boot in HYP/EL2 mode is a strict
+requirement for Xen.
+
+The exceptions to this on 32-bit ARM are as follows:
+
+ Xen does not require the machine type to be passed in r1. This
+ register is ignored (so may be invalid or the actual machine type).
+
+ Xen does not support the ATAG list and requires Device
+ Tree. Therefore r2 must point to the physical address of device tree
+ block (dtb) in system RAM.
+
+ NOTE: although Xen uses the zImage protocol there is no compression
+ actually used. This should be transparent to the bootloader. The
+ zImage protocol should still be used and not the stricter "raw
+ (non-zImage)" protocol described in arm/Booting.
+
+The exceptions to this on 64-bit ARM are as follows:
+
+ Xen binary should be loaded in memory below 2 TiB.
+
+Booting Guests
+--------------
+
+Xen supports the legacy image header[3], zImage protocol for 32-bit
+ARM Linux[1] and Image protocol defined for ARM64[2].
+
+Until Xen 4.17, in case of legacy image protocol, Xen ignored the load
+address and entry point specified in the header. This has now changed.
+
+Now, it loads the image at the load address provided in the header.
+And the entry point is used as the kernel start address.
+
+A deviation from uboot is that, Xen treats "load address == 0x0" as
+position independent execution (PIE). Thus, Xen will load such an image
+at an address it considers appropriate. Also, user cannot specify the
+entry point of a PIE image since the start address cennot be
+predetermined.
+
+Users who want to use Xen with statically partitioned domains, can provide
+the fixed non zero load address and start address for the dom0/domU kernel.
+The load address and start address specified by the user in the header must
+be within the memory region allocated by Xen.
+
+Also, it is to be noted that if user provides the legacy image header on
+top of zImage or Image header, then Xen uses the attributes of legacy
+image header to determine the load address, entry point, etc.
+
+
+Firmware/bootloader requirements
+--------------------------------
+
+Xen relies on some settings the firmware has to configure in EL3 before starting Xen.
+
+* Xen must be entered in NS EL2 mode
+
+* The bit SCR_EL3.HCE (resp. SCR.HCE for 32-bit ARM) must be set to 1.
+
+
+[1] linux/Documentation/arm/booting.rst
+Latest version: http://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/tree/Documentation/arm/booting.rst
+
+[2] linux/Documentation/arm64/booting.rst
+Latest version: http://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/tree/Documentation/arm64/booting.rst
+
+[3] legacy format header
+Latest version: https://source.denx.de/u-boot/u-boot/-/blob/master/include/image.h#L315
+https://linux.die.net/man/1/mkimage

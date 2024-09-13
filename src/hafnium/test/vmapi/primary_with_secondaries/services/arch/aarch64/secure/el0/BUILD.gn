@@ -1,0 +1,80 @@
+# Copyright 2022 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("//build/image/image.gni")
+import("//test/hftest/args.gni")
+
+vm_kernel("secure_service1") {
+  testonly = true
+
+  deps = [
+    "//src/arch/aarch64/hftest/el0:interrupts",
+    "//src/arch/aarch64/hftest/el0:mm",
+    "//test/hftest:hftest_sel0_partition_base",
+    "//test/vmapi/common/arch/aarch64/el0:exception_handler",
+    "//test/vmapi/primary_with_secondaries:primary_with_secondaries",
+    "//test/vmapi/primary_with_secondaries/services:echo",
+    "//test/vmapi/primary_with_secondaries/services:ffa_check",
+    "//test/vmapi/primary_with_secondaries/services:memory",
+    "//test/vmapi/primary_with_secondaries/services:relay",
+    "//test/vmapi/primary_with_secondaries/services/arch/aarch64/el0:mem_permissions",
+    "//test/vmapi/primary_with_secondaries/services/arch/aarch64/secure:message_loop",
+  ]
+}
+
+manifest("partition_manifest_service_sp1") {
+  source = "partition_manifest_service_sp1.dts"
+  output = "partition_manifest_service_sp1.dtb"
+}
+
+partition_package("service_sp1_partition_package") {
+  testonly = true
+  pm_offset = "0x1000"
+  img_offset = "0x2000"
+  files = [ [
+        "partition_manifest_service_sp1.dtb",
+        "secure_service1.bin",
+        ":partition_manifest_service_sp1",
+        ":secure_service1",
+      ] ]
+  output = "service_sp1_partition_package.img"
+}
+
+vm_kernel("secure_service2") {
+  testonly = true
+
+  deps = [
+    "//src/arch/aarch64/hftest/el0:interrupts",
+    "//src/arch/aarch64/hftest/el0:mm",
+    "//test/hftest:hftest_sel0_partition_base",
+    "//test/vmapi/common/arch/aarch64/el0:exception_handler",
+    "//test/vmapi/primary_with_secondaries:primary_with_secondaries",
+    "//test/vmapi/primary_with_secondaries/services:echo",
+    "//test/vmapi/primary_with_secondaries/services:ffa_check",
+    "//test/vmapi/primary_with_secondaries/services:memory",
+    "//test/vmapi/primary_with_secondaries/services:relay",
+    "//test/vmapi/primary_with_secondaries/services/arch/aarch64/el0:mem_permissions",
+    "//test/vmapi/primary_with_secondaries/services/arch/aarch64/secure:message_loop",
+  ]
+}
+
+manifest("partition_manifest_service_sp2") {
+  source = "partition_manifest_service_sp2.dts"
+  output = "partition_manifest_service_sp2.dtb"
+}
+
+partition_package("service_sp2_partition_package") {
+  testonly = true
+  pm_offset = "0x1000"
+  img_offset = "0x2000"
+  files = [ [
+        "partition_manifest_service_sp2.dtb",
+        "secure_service2.bin",
+        ":partition_manifest_service_sp2",
+        ":secure_service2",
+      ] ]
+  output = "service_sp2_partition_package.img"
+}

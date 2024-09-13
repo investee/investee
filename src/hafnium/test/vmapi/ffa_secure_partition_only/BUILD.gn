@@ -1,0 +1,55 @@
+# Copyright 2021 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("//build/image/image.gni")
+import("//test/hftest/args.gni")
+
+# Tests with no secondary VMs.
+vm_kernel("secure_partition_test_vm") {
+  testonly = true
+
+  sources = [ "secure_partition.c" ]
+
+  deps = [
+    "//src/arch/aarch64/hftest:interrupts",
+    "//test/hftest:hftest_standalone_secure",
+    "//test/vmapi/common:ffa",
+    "//test/vmapi/common/arch/aarch64:exception_handler",
+    "//vmlib/${plat_arch}:call",
+  ]
+}
+
+manifest("ffa_secure_partition_only_partition_manifest") {
+  source = "partition-manifest.dts"
+  output = "partition-manifest.dtb"
+  overlay = hftest_manifest_overlay
+}
+
+partition_package("ffa_secure_partition_only_test_package") {
+  testonly = true
+  pm_offset = "0x1000"
+  img_offset = "0x2000"
+  files = [ [
+        "partition-manifest.dtb",
+        "secure_partition_test_vm.bin",
+        ":ffa_secure_partition_only_partition_manifest",
+        ":secure_partition_test_vm",
+      ] ]
+  output = "ffa_secure_partition_only_test_package.img"
+}
+
+partitions_json("ffa_secure_partition_only_test") {
+  testonly = true
+
+  sps = [ [
+        "ffa_secure_partition_only_test_package.img",
+        "manifest.dts",
+        ":ffa_secure_partition_only_test_package",
+        ":ffa_secure_partition_only_partition_manifest",
+      ] ]
+  vms = []
+  json_file = "ffa_secure_partition_only_test.json"
+}

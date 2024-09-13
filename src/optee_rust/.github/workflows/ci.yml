@@ -1,0 +1,110 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: CI
+on: [push, pull_request]
+defaults:
+  run:
+    shell: bash
+
+jobs:
+#  build-and-run-examples:
+#    runs-on: ubuntu-20.04
+#    container: teaclave/teaclave-trustzone-sdk-build:0.3.0
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v2
+#        with:
+#          submodules: recursive
+#      - name: Setting up $HOME
+#        run: |
+#          cp /root/.bashrc $HOME/.bashrc &&
+#          ln -sf /root/.rustup ~/.rustup &&
+#          ln -sf /root/.cargo ~/.cargo
+#      - name: Building
+#        run: |
+#          apt update && apt install libslirp-dev -y
+#          export CARGO_NET_GIT_FETCH_WITH_CLI=true &&
+#          ./setup.sh &&
+#          source environment &&
+#          make optee &&
+#          . ~/.cargo/env &&
+#          rustup component add rust-src &&
+#          rustup target install aarch64-unknown-linux-gnu arm-unknown-linux-gnueabihf &&
+#          rustup default nightly-2021-09-20 &&
+#          make examples
+#      - name: Run tests and examples
+#        run: |
+#          cd ci && ./ci.sh
+  build-utee-teec:
+    runs-on: ubuntu-20.04
+    container: teaclave/teaclave-trustzone-sdk-build:0.3.0
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Setting up $HOME
+        run: |
+          cp /root/.bashrc $HOME/.bashrc &&
+          ln -sf /root/.rustup ~/.rustup &&
+          ln -sf /root/.cargo ~/.cargo
+      - name: Building
+        run: |
+          export CARGO_NET_GIT_FETCH_WITH_CLI=true &&
+          ./setup.sh &&
+          source environment &&
+          make optee &&
+          . ~/.cargo/env &&
+          rustup component add rust-src &&
+          rustup target install aarch64-unknown-linux-gnu arm-unknown-linux-gnueabihf &&
+          rustup default nightly-2021-09-20 &&
+          (cd optee-utee && xargo build --target aarch64-unknown-optee-trustzone -vv) &&
+          (cd optee-teec && cargo build --target aarch64-unknown-linux-gnu -vv)
+  build-and-run-examples-in-OPTEE-repo:
+    runs-on: ubuntu-20.04
+    container: teaclave/teaclave-trustzone-sdk-build:0.3.0
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+          path: 'incubator-teaclave-trustzone-sdk'
+      - name: Checkout OP-TEE repository
+        run: |
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo-1 > ~/bin/repo && chmod a+x ~/bin/repo
+          export PATH=~/bin:$PATH
+          mkdir -p ~/optee-qemuv8 && cd ~/optee-qemuv8 &&
+          repo init -u https://github.com/OP-TEE/manifest.git -m qemu_v8.xml &&
+          repo sync -j4 --no-clone-bundle
+      - name: Build images and run tests
+        run: |
+          apt update && apt install libslirp-dev -y
+          cd ~/optee-qemuv8
+          rm -rf optee_rust/ &&
+          mv $GITHUB_WORKSPACE/incubator-teaclave-trustzone-sdk optee_rust/
+          export OPTEE_DIR=$(pwd)
+          cd build &&
+          make -j2 toolchains &&
+          make CFG_TEE_CORE_LOG_LEVEL=0 OPTEE_RUST_ENABLE=y CFG_TEE_RAM_VA_SIZE=0x00300000 check-rust
+  license:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Check License Header
+        uses: apache/skywalking-eyes/header@501a28d2fb4a9b962661987e50cf0219631b32ff

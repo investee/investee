@@ -1,0 +1,84 @@
+# Copyright 2018 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("//build/image/image.gni")
+import("//build/toolchain/platform.gni")
+import("//test/hftest/args.gni")
+
+config("config") {
+  include_dirs = [ "inc" ]
+}
+
+source_set("gicv3_setup") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//test/hftest:hftest_config",
+  ]
+
+  sources = [ "gicv3_setup.c" ]
+}
+
+# Tests specific to GICv3.
+vm_kernel("gicv3_test_vm") {
+  testonly = true
+  public_configs = [ ":config" ]
+
+  sources = [
+    "busy_secondary.c",
+    "gicv3.c",
+    "interrupts.c",
+    "timer_secondary.c",
+  ]
+
+  deps = [
+    ":gicv3_setup",
+    "//src/arch/aarch64:arch",
+    "//src/arch/aarch64/hftest:interrupts",
+    "//src/arch/aarch64/hftest:interrupts_gicv3",
+    "//test/hftest:hftest_primary_vm",
+    "//test/vmapi/common:ffa",
+    "//test/vmapi/common/arch/aarch64:exception_handler",
+  ]
+}
+
+manifest("gicv3_test_manifest") {
+  source = "manifest.dts"
+  output = "manifest.dtb"
+  overlay = hftest_manifest_overlay
+}
+
+device_tree("secondary_dtb") {
+  source = "secondary.dts"
+  output = "$target_out_dir/secondary.dtb"
+}
+
+initrd("gicv3_test") {
+  testonly = true
+
+  files = [
+    [
+      "manifest.dtb",
+      ":gicv3_test_manifest",
+      "manifest.dtb",
+    ],
+    [
+      "gicv3_test",
+      ":gicv3_test_vm",
+      "gicv3_test_vm.bin",
+    ],
+    [
+      "services1",
+      "services:gicv3_service_vm1",
+      "gicv3_service_vm1.bin",
+    ],
+    [
+      "secondary.dtb",
+      ":secondary_dtb",
+      "secondary.dtb",
+    ],
+  ]
+}

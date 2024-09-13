@@ -1,0 +1,89 @@
+# Copyright 2018 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+# These components are only used by VMs for aarch64 specific actions.
+
+# Implements image_entry for a simple VM kernel.
+import("//src/arch/aarch64/args.gni")
+source_set("entry") {
+  sources = [ "entry.S" ]
+  deps = [ ":pauth" ]
+}
+
+source_set("sp_secondary_entry") {
+  sources = [ "sp_secondary_entry.S" ]
+  deps = [ ":pauth" ]
+}
+
+# Implements image_entry for a simple EL0 partition.
+source_set("el0_entry") {
+  sources = [ "el0_entry.S" ]
+}
+
+# Shutdown the system or exit emulation, start/stop CPUs.
+source_set("power_mgmt") {
+  testonly = true
+  public_configs = [ "//src/arch/aarch64:config" ]
+  sources = [
+    "cpu_entry.S",
+    "power_mgmt.c",
+  ]
+
+  deps = [ "//src/arch/aarch64:smc" ]
+}
+
+# Exception handlers for interrupts.
+source_set("interrupts") {
+  testonly = true
+  public_configs = [
+    "//src/arch/aarch64:config",
+    "//test/hftest:hftest_config",
+  ]
+  sources = [
+    "events.c",
+    "exceptions.S",
+    "interrupts.c",
+  ]
+}
+
+# GICv3 EL1 driver.
+source_set("interrupts_gicv3") {
+  testonly = true
+  public_configs = [ "//src/arch/aarch64:config" ]
+  sources = [ "interrupts_gicv3.c" ]
+}
+
+# Get/set CPU state.
+source_set("state") {
+  testonly = true
+  public_configs = [ "//src/arch/aarch64:config" ]
+  sources = [ "state.c" ]
+}
+
+# Interact directly with registers.
+source_set("registers") {
+  testonly = true
+  sources = [ "registers.c" ]
+}
+
+source_set("el0_stdout") {
+  sources = [ "stdout.c" ]
+
+  deps = [ "//vmlib/aarch64:svc_call" ]
+}
+
+source_set("stdout") {
+  sources = [ "stdout.c" ]
+}
+
+source_set("mm") {
+  sources = [ "mm.c" ]
+}
+
+source_set("pauth") {
+  public_configs = [ "//src/arch/aarch64:config" ]
+  sources = [ "pauth_macros.S" ]
+}

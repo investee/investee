@@ -1,0 +1,261 @@
+# Copyright 2023 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("//build/image/image.gni")
+
+config("config") {
+  include_dirs = [
+    "inc",
+    "//test/inc",
+  ]
+}
+
+source_set("common") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//src/arch/aarch64:arch_config",
+  ]
+  sources = [ "common.c" ]
+}
+
+source_set("discovery") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//src/arch/aarch64:arch_config",
+  ]
+  sources = [ "discovery.c" ]
+
+  deps = [ ":common" ]
+}
+
+source_set("partition_services") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//src/arch/aarch64:arch_config",
+  ]
+  sources = [ "partition_services.c" ]
+
+  deps = [
+    ":common",
+    "//src/arch/aarch64:smc",
+    "//test/vmapi/common:ffa",
+  ]
+}
+
+source_set("notifications") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//src/arch/aarch64:arch_config",
+  ]
+  sources = [ "notifications.c" ]
+
+  deps = [ ":common" ]
+}
+
+source_set("power_mgt") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//src/arch/aarch64:arch_config",
+  ]
+  sources = [ "power_mgt.c" ]
+}
+
+source_set("sp805") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//src/arch/aarch64:arch_config",
+  ]
+  sources = [ "sp805.c" ]
+}
+
+source_set("secure_interrupts") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//src/arch/aarch64:arch_config",
+  ]
+  sources = [ "secure_interrupts.c" ]
+}
+
+source_set("message_loop") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//test/hftest:hftest_config",
+    "//src/arch/aarch64:arch_config",
+  ]
+  sources = [ "message_loop.c" ]
+
+  deps = [
+    ":discovery",
+    ":notifications",
+    ":partition_services",
+    ":power_mgt",
+    ":secure_interrupts",
+    "//test/vmapi/common:ffa",
+  ]
+}
+source_set("test_main_sp_boot_fail") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//test/hftest:hftest_config",
+    "//src/arch/aarch64:arch_config",
+  ]
+  sources = [ "test_main_sp_boot_fail.c" ]
+
+  deps = [ "//vmlib/${plat_arch}:call" ]
+}
+
+source_set("sp_helpers") {
+  testonly = true
+  public_configs = [
+    ":config",
+    "//src/arch/aarch64:arch_config",
+  ]
+  sources = [ "sp_helpers.c" ]
+}
+
+# SP that will be controlled via communication/scheduling primitives by the
+# former SP
+vm_kernel("secure_partitions_services") {
+  testonly = true
+  public_configs = [ ":config" ]
+
+  deps = [
+    ":message_loop",
+    ":sp805",
+    ":sp_helpers",
+    "//src/arch/aarch64:arch",
+    "//src/arch/aarch64/hftest:interrupts",
+    "//test/hftest:hftest_secure_service",
+    "//test/vmapi/common/arch/aarch64:exception_handler",
+    "//vmlib/${plat_arch}:call",
+  ]
+}
+
+# SP that will be controlled via communication/scheduling primitives by the
+# former SP.
+# Uses a modified boot flow to test SP initialization error handling.
+vm_kernel("secure_partitions_services_boot_fail_test") {
+  testonly = true
+  public_configs = [ ":config" ]
+
+  deps = [
+    ":test_main_sp_boot_fail",
+    "//test/hftest:hftest_secure_service",
+  ]
+}
+
+manifest("partition_manifest_service_sp_first") {
+  source = "partition_manifest_service_sp_first.dts"
+  output = "partition_manifest_service_sp_first.dtb"
+}
+
+manifest("partition_manifest_service_sp_second") {
+  source = "partition_manifest_service_sp_second.dts"
+  output = "partition_manifest_service_sp_second.dtb"
+}
+
+manifest("partition_manifest_service_sp_third") {
+  source = "partition_manifest_service_sp_third.dts"
+  output = "partition_manifest_service_sp_third.dtb"
+}
+
+partition_package("service_sp_first_package") {
+  testonly = true
+  pm_offset = "0x1000"
+  img_offset = "0x2000"
+  files = [ [
+        "partition_manifest_service_sp_first.dtb",
+        "secure_partitions_services.bin",
+        ":partition_manifest_service_sp_first",
+        ":secure_partitions_services",
+      ] ]
+  output = "service_sp_first_package.img"
+}
+
+partition_package("service_sp_second_package") {
+  testonly = true
+  pm_offset = "0x1000"
+  img_offset = "0x2000"
+  files = [ [
+        "partition_manifest_service_sp_second.dtb",
+        "secure_partitions_services.bin",
+        ":partition_manifest_service_sp_second",
+        ":secure_partitions_services",
+      ] ]
+  output = "service_sp_second_package.img"
+}
+
+partition_package("service_sp_third_package") {
+  testonly = true
+  pm_offset = "0x1000"
+  img_offset = "0x2000"
+  files = [ [
+        "partition_manifest_service_sp_third.dtb",
+        "secure_partitions_services.bin",
+        ":partition_manifest_service_sp_third",
+        ":secure_partitions_services",
+      ] ]
+  output = "service_sp_third_package.img"
+}
+
+# The following partition packages (service_sp_<X>_package_boot_fail_test)
+# are used in tests where the <X> service SP fails to initialize.
+#
+# These may be used in various combinations with the existing
+# service_sp_<X>_package partition packages to create test configurations
+# where one or more SPs fail to boot while others may succeed.
+#
+# The manifest contents are not important as long as they represent
+# a valid configuration that would reach the boot stage in order
+# to test the failure reporting.
+
+partition_package("service_sp_first_package_boot_fail_test") {
+  testonly = true
+  pm_offset = "0x1000"
+  img_offset = "0x2000"
+  files = [ [
+        "partition_manifest_service_sp_first.dtb",
+        "secure_partitions_services_boot_fail_test.bin",
+        ":partition_manifest_service_sp_first",
+        ":secure_partitions_services_boot_fail_test",
+      ] ]
+  output = "service_sp_first_package_boot_fail_test.img"
+}
+
+partition_package("service_sp_second_package_boot_fail_test") {
+  testonly = true
+  pm_offset = "0x1000"
+  img_offset = "0x2000"
+  files = [ [
+        "partition_manifest_service_sp_second.dtb",
+        "secure_partitions_services_boot_fail_test.bin",
+        ":partition_manifest_service_sp_second",
+        ":secure_partitions_services_boot_fail_test",
+      ] ]
+  output = "service_sp_second_package_boot_fail_test.img"
+}
+
+partition_package("service_sp_third_package_boot_fail_test") {
+  testonly = true
+  pm_offset = "0x1000"
+  img_offset = "0x2000"
+  files = [ [
+        "partition_manifest_service_sp_third.dtb",
+        "secure_partitions_services_boot_fail_test.bin",
+        ":partition_manifest_service_sp_third",
+        ":secure_partitions_services_boot_fail_test",
+      ] ]
+  output = "service_sp_third_package_boot_fail_test.img"
+}

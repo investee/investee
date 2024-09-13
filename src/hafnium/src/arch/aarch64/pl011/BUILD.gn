@@ -1,0 +1,28 @@
+# Copyright 2019 The Hafnium Authors.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/BSD-3-Clause.
+
+import("args.gni")
+
+# aarch64 PL011 implementation of putchar for debugging.
+source_set("pl011") {
+  sources = [ "pl011.c" ]
+  deps = [ "//src/arch/aarch64:arch" ]
+
+  assert(defined(pl011_base_address),
+         "\"pl011_base_address\" must be defined for ${target_name}.")
+
+  assert(defined(pl011_clock),
+         "\"pl011_clock\" must be defined for ${target_name}.")
+
+  assert(defined(pl011_baudrate),
+         "\"pl011_baudrate\" must be defined for ${target_name}.")
+
+  defines = [
+    "PL011_BASE=${pl011_base_address}",
+    "PL011_CLOCK=${pl011_clock}",
+    "PL011_BAUDRATE=${pl011_baudrate}",
+  ]
+}
